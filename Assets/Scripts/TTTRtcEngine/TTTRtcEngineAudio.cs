@@ -7,19 +7,34 @@ namespace TTTRtcEngine
 {
 	public enum ERROR_CODE
 	{
-		INVALID_CHANNEL_NAME = 9000,
-		ENTER_TIMEOUT        = 9001,
-		ENTER_FAILED         = 9002,
-		ENTER_VERIFYFAILED   = 9003,
-		ENTER_BADVERSION     = 9004,
-		ENTER_UNKNOWN        = 9005,
-	};
+		INVALID_CHANNEL_NAME        = 1,
+		ENTER_TIMEOUT               = 2,
+        ENTER_VERIFYFAILED          = 3,
+        ENTER_BADVERSION            = 4,
+		ENTER_FAILED                = 5,
+		ENTER_ROOM_NO_EXIST         = 6,
+        ENTER_SERVER_VERIFYFAILED   = 7,
+        ENTER_UNKNOW                = 8,
+    };
 
-	public enum LOG_FILTER
+    public enum KICK_ERROR_CODE
+    {
+        ERROR_KICK_BY_HOST = 101,
+        ERROR_KICK_BY_PUSHRTMPFAILED = 102,
+        ERROR_KICK_BY_SERVEROVERLOAD = 103,
+        ERROR_KICK_BY_MASTER_EXIT = 104,
+        ERROR_KICK_BY_RELOGIN = 105,
+        ERROR_KICK_BY_NOAUDIODATA = 106,
+        ERROR_KICK_BY_NOVIDEODATA = 107,
+        ERROR_KICK_BY_NEWCHAIRENTER = 108,
+        ERROR_TOKEN_EXPIRED = 109,
+    };
+
+    public enum LOG_FILTER
 	{
 		OFF      = 0,
 		DEBUG    = 0x080f,
-		INFO     = 0x000f,
+	    INFO     = 0x000f,
 		WARNING  = 0x000e,
 		ERROR    = 0x000c,
 	};
@@ -66,14 +81,14 @@ namespace TTTRtcEngine
 	#region DllImport
 		#if UNITY_STANDALONE_WIN || UNITY_EDITOR
 		public const string MyLibName = "TTTRtcEngine";
-		#else
-		#if UNITY_IPHONE
+        #else
+        #if UNITY_IPHONE
 		public const string MyLibName = "__Internal";
-		#else
+        #else
 		public const string MyLibName = "TTTRtcEngine";
-		#endif
-		#endif
-		[DllImport (MyLibName, CharSet = CharSet.Ansi)]
+        #endif
+        #endif
+        [DllImport (MyLibName, CharSet = CharSet.Ansi)]
 		private static extern int getMessageCount();
 		[DllImport (MyLibName, CharSet = CharSet.Ansi)]
 		private static extern IntPtr getMessage(); // caller free the returned char * (through freeObject)
@@ -158,7 +173,10 @@ namespace TTTRtcEngine
 		public delegate void SDKErrorHandler (ERROR_CODE error, string msg);
 		public SDKErrorHandler OnError;
 
-		public delegate void RtcStatsHandler (RtcStats stats);
+        public delegate void SDKKickErrorHandler(KICK_ERROR_CODE error, string msg);
+        public SDKKickErrorHandler onUserKicked;
+
+        public delegate void RtcStatsHandler (RtcStats stats);
 		public RtcStatsHandler OnRtcStats;
 
 		public delegate void AudioMixingFinishedHandler ();
@@ -195,29 +213,76 @@ namespace TTTRtcEngine
 			case ERROR_CODE.ENTER_TIMEOUT:
 				error = "超时,10秒未收到服务器返回结果";
 				break;
-			case ERROR_CODE.ENTER_FAILED:
-				error = "无法连接服务器";
-				break;
 			case ERROR_CODE.ENTER_VERIFYFAILED:
-				error = "验证码错误";
+				error = "token验证失败";
 				break;
 			case ERROR_CODE.ENTER_BADVERSION:
-				error = "版本错误";
+				error = "服务器版本错误";
 				break;
-			case ERROR_CODE.ENTER_UNKNOWN:
-				error = "未知错误";
+			case ERROR_CODE.ENTER_FAILED:
+				error = "连接服务器失败";
 				break;
-			};
+			case ERROR_CODE.ENTER_ROOM_NO_EXIST:
+				error = "房间不存在";
+				break;
+            case ERROR_CODE.ENTER_SERVER_VERIFYFAILED:
+                error = "服务器验证失败";
+                break;
+            case ERROR_CODE.ENTER_UNKNOW:
+                error = "未知错误";
+                break;
+            };
 			return error;
 		}
 
-		/**
+        /**
+         * 获取错误描述
+         * @param [in] code 错误代码
+         * @return 错误代码对应的错误描述
+         */
+        public static string GetKickErrorDescription(KICK_ERROR_CODE code)
+        {
+            string error = string.Empty;
+            switch (code)
+            {
+                case KICK_ERROR_CODE.ERROR_KICK_BY_HOST:
+                    error = "被主播请出房间";
+                    break;
+                case KICK_ERROR_CODE.ERROR_KICK_BY_MASTER_EXIT:
+                    error = "RTMP推流失败";
+                    break;
+                case KICK_ERROR_CODE.ERROR_KICK_BY_NEWCHAIRENTER:
+                    error = "其他人以主播身份进入房间";
+                    break;
+                case KICK_ERROR_CODE.ERROR_KICK_BY_NOAUDIODATA:
+                    error = "没有上行音频数据";
+                    break;
+                case KICK_ERROR_CODE.ERROR_KICK_BY_NOVIDEODATA:
+                    error = "没有上行视频数据";
+                    break;
+                case KICK_ERROR_CODE.ERROR_KICK_BY_PUSHRTMPFAILED:
+                    error = "RTMP推流失败";
+                    break;
+                case KICK_ERROR_CODE.ERROR_KICK_BY_RELOGIN:
+                    error = "重复登录";
+                    break;
+                case KICK_ERROR_CODE.ERROR_KICK_BY_SERVEROVERLOAD:
+                    error = "服务器过载";
+                    break;
+                case KICK_ERROR_CODE.ERROR_TOKEN_EXPIRED:
+                    error = "token过期";
+                    break;
+            };
+            return error;
+        }
+
+        /**
 		 * 设置频道属性
 		 *
 		 * @param profile 频道模式
 		 * @return 0: 方法调用成功，<0: 方法调用失败。
 		 */
-		public int SetChannelProfile(CHANNEL_PROFILE profile) {
+        public int SetChannelProfile(CHANNEL_PROFILE profile) {
 			return setChannelProfile ((int)profile);
 		}
 
@@ -464,7 +529,13 @@ namespace TTTRtcEngine
 					ERROR_CODE errCode = (ERROR_CODE)int.Parse (sArray [1]);
 					OnError (errCode, GetErrorDescription(errCode));
 				}
-			} else if (sArray [0].CompareTo ("onConnectionLost") == 0) {
+            } else if (sArray[0].CompareTo("onUserKicked") == 0){
+                if (onUserKicked != null){
+                    int uid = int.Parse(sArray[1]);
+                    KICK_ERROR_CODE errCode = (KICK_ERROR_CODE)int.Parse(sArray[2]);
+                    onUserKicked(errCode, GetKickErrorDescription(errCode));
+                }
+            } else if (sArray [0].CompareTo ("onConnectionLost") == 0) {
 				if (OnConnectionLost != null) {
 					OnConnectionLost ();
 				}
@@ -477,9 +548,9 @@ namespace TTTRtcEngine
 			} else if (sArray [0].CompareTo ("onLeaveChannel") == 0) {
 				if (OnLeaveChannel != null) {
 					int duration = int.Parse (sArray [1]);
-					int txAudioKBitrate = int.Parse (sArray [4]);
-					int rxAudioKBitrate = int.Parse (sArray [5]);
-					int users = int.Parse (sArray [8]);
+					int txAudioKBitrate = int.Parse (sArray [2]);
+					int rxAudioKBitrate = int.Parse (sArray [3]);
+					int users = int.Parse (sArray [4]);
 
 					RtcStats stats;
 					stats.duration = (uint)duration;

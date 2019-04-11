@@ -1,0 +1,12 @@
+/Library/*
+/Temp/
+/.vs/
+/Unity.*
+/obj/
+/Packages/
+/Logs/
+/Assembly-CSharp.csproj
+/Android-Unity3DAudio.csproj
+/Assembly-CSharp-Editor.csproj
+/Android-Unity3DAudio.sln
+/*.apk

@@ -93,7 +93,8 @@ public class Home : MonoBehaviour {
 	}
 
 	public void onJoinChannelSuccess (string channelName, uint uid, int elapsed) {
-		JoinButton.GetComponent<Home> ().enabled = false;
+        app.RtcEngineAudio.EnableAudioVolumeIndication(300, 3);
+        JoinButton.GetComponent<Home> ().enabled = false;
 
 		ChannelName = channelName;
 		SceneManager.sceneLoaded += OnSceneLoaded;
